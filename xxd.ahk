@@ -69,8 +69,10 @@ Main:
 			_main.Finest("outfile", outfile)
 		}
 
-		if (G_help)
+		if (G_help) {
 			Console.Write(op.Usage() "`n")
+			exitapp _main.Return()
+		}
 
 		; Plausibility checks
 		if (files.MaxIndex() > 2)
@@ -90,6 +92,10 @@ Main:
 			G_cols := 30
 			if (_main.Logs(Logger.Info))
 				_main.Info("-p: Setting 'cols' to 30")
+		} else if (G_bits && G_cols = "") {
+			G_cols := 6
+			if (_log.Logs(Logger.Info))
+				_log.Info("-b: Setting 'cols' to 6")
 		} else if (G_cols = "") {
 			G_cols := 16
 			if (_main.Logs(Logger.Info))
@@ -116,36 +122,68 @@ generate_dump(infile, outfile) {
 		_log.Input("outfile", outfile)
 	}
 
-	buf_size := VarSetCapacity(buffer, 4096)
+	buf_size := VarSetCapacity(buffer, 8192)
 	if (_log.Logs(Logger.Finest))
 		_log.Finest("buf_size", buf_size)
 	offset := 0
+	cur_code_sum := 0 ; Sum of all bytes in current line
+	nul_line_count := 0 ; Number of consecutive nul lines
+	cur_octets_count := 0 ; Number of octets in current line
 	try {
 		_in := open_infile(infile)
 		_out := open_outfile(outfile)
 		while (!_in.AtEOF) {
 			bytes_read := _in.RawRead(buffer, buf_size)
-			out_line := offset.AsHex(String.ASHEX_NOPREFIX).Pad(String.PAD_LEFT, 7, "0") ": "
+			out_line := (G_plain ? "" : offset.AsHex(String.ASHEX_NOPREFIX).Pad(String.PAD_LEFT, 7, "0") ": ")
 			out_line_right := ""
 			loop %bytes_read% {
+				if (G_length && offset+cur_octets_count >= G_length) { ; Force "End of file" reached if a max length is given
+					bytes_read := A_Index
+					_in.Seek(0, 2) ; Goto end-of-file
+					break
+				}
 				byte := NumGet(buffer, A_Index-1, "UChar")
-				out_line .= byte.AsHex(String.ASHEX_NOPREFIX, 2)
-				if (byte > 32 && byte < 127)
-					out_line_right .= Chr(byte)
-				else
-					out_line_right .= "."
-				if (!Mod(A_Index, G_groupsize))
+				if (G_autoskip)
+					cur_code_sum+=byte
+				out_line .= (G_bits ? byte.AsBinary(8) : byte.AsHex(String.ASHEX_NOPREFIX, 2)) ; Todo: String class' AsBinary and AsHex seem to be too slow here: Optimize!
+				cur_octets_count++
+				if (!G_plain) { ; Fill right hand size with readable chars
+					if (byte > 32 && byte < 127)
+						out_line_right .= Chr(byte)
+					else
+						out_line_right .= "."
+				}
+				if (!G_plain && G_groupsize <> 0 && cur_octets_count < G_cols && !Mod(cur_octets_count, G_groupsize)) { ; Grouping 
 					out_line .= " "
-				if (!Mod(A_Index, G_cols)) {
-					_out.WriteLine(out_line " " out_line_right)
-					out_line := (offset+=G_cols).AsHex(String.ASHEX_NOPREFIX).Pad(String.PAD_LEFT, 7, "0") ": "
+				}
+				if (!Mod(cur_octets_count, G_cols)) { ; Max no of cols reached
+					if (G_autoskip)
+						if (cur_code_sum = 0)
+							nul_line_count++
+						else
+							nul_line_count := 0
+					if (nul_line_count <= 1) ; Print a "normal" line or the first "nul" line
+						_out.WriteLine(out_line "  " out_line_right)
+					else if (nul_line_count = 2) ; Print a single "*" for a second consecutive "nul" line; print nothing for more consecutive "nul" lines
+						_out.WriteLine("*")
+					offset += G_cols
+					out_line := (G_plain ? "" : offset.AsHex(String.ASHEX_NOPREFIX).Pad(String.PAD_LEFT, 7, "0") ": ")
 					out_line_right := ""
+					cur_code_sum := 0
+					cur_octets_count := 0
 				}
 			}
 		}
-		if (out_line_right) {
-			cols_left := G_cols - Mod(bytes_read, G_cols)
-			_out.WriteLine(out_line " ".Repeat(cols_left * 2 + cols_left // G_groupsize + 1) . out_line_right)
+		if (cur_octets_count > 0) { ; Fill last line if neccessary
+			cur_octets_count++
+			while (cur_octets_count <= G_cols) {
+				out_line .= (G_bits ? "        " : "  ")
+				out_line_right .= " "
+				if (!G_plain && G_groupsize <> 0 && cur_octets_count < G_cols && !Mod(cur_octets_count, G_groupsize))
+					out_line .= " "
+				cur_octets_count++
+			}
+			_out.WriteLine(out_line "  " out_line_right)
 		}
 	} finally {
 		if (_in)
