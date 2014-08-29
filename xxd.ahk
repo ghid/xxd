@@ -145,7 +145,7 @@ generate_dump(infile, outfile) {
 				byte := NumGet(buffer, A_Index-1, "UChar")
 				if (G_autoskip)
 					cur_code_sum+=byte
-				out_line .= (G_bits ? byte.AsBinary(8) : byte.AsHex(String.ASHEX_NOPREFIX, 2)) ; Todo: String class' AsBinary and AsHex seem to be too slow here: Optimize!
+				out_line .= octet(byte)
 				cur_octets_count++
 				if (!G_plain) { ; Fill right hand size with readable chars
 					if (byte > 32 && byte < 127)
@@ -224,4 +224,40 @@ open_outfile(outfile) {
 		throw Exception("xxd: Failed to open file: " outfile,, 4)
 
 	return _log.Exit(o)
+}
+
+/*
+ * Function: octet
+ *     Return displayable octet
+ */
+octet(value) {
+	_log := new Logger("app.xxd." A_ThisFunc)
+
+	static DIGIT_TAB := {  0: ["0", "0", "0000"]
+						,  1: ["1", "1", "0001"]
+						,  2: ["2", "2", "0010"]
+						,  3: ["3", "3", "0011"]
+						,  4: ["4", "4", "0100"]
+						,  5: ["5", "5", "0101"]
+						,  6: ["6", "6", "0110"]
+						,  7: ["7", "7", "0111"]
+						,  8: ["8", "8", "1000"]
+						,  9: ["9", "9", "1001"]
+						, 10: ["a", "A", "1010"]
+						, 11: ["b", "B", "1011"]
+						, 12: ["c", "C", "1100"]
+						, 13: ["d", "D", "1101"]
+						, 14: ["e", "E", "1110"]
+						, 15: ["f", "F", "1111"]}
+	
+	if (_log.Logs(Logger.Input)) {
+		_log.Input("value", value)
+	}
+
+	d1 := value // 16
+	d2 := Mod(value, 16)
+
+	i := (G_bits ? 3 : (G_uppercase ? 2 : 1))
+
+	return _log.Exit(DIGIT_TAB[d1, i] . DIGIT_TAB[d2, i])
 }
