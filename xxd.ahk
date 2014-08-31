@@ -35,9 +35,10 @@ Main:
 	op.Add(new OptParser.String("l", "len", G_length, "len", "stop after <len> octets"))
 	op.Add(new OptParser.Boolean("p", "plain", G_plain, "output in postscript plain hexdump style"))
 	op.Add(new OptParser.Boolean("r", "revert", G_revert, "reverse operation: convert (or patch) hexdump into binary"))
-	op.Add(new OptParser.String("s", "seek", G_seek, "[+|-]seek", "start at <seek> bytes abs. (or +: rel.) infile offset"))
+	op.Add(new OptParser.String("s", "seek", G_seek, "[+][-]seek", "start at <seek> bytes abs. (or +: rel.) infile offset"))
 	op.Add(new OptParser.Boolean("u", "", G_uppercase, "use uppercase hex letters"))
 	op.Add(new OptParser.Boolean("h", "help", G_help, "", OptParser.OPT_HIDDEN))
+	op.Add(new OptParser.Boolean("v", "version", G_version, "", OptParser.OPT_HIDDEN))
 
 	try {
 		files := op.Parse(System.vArgs)
@@ -71,6 +72,11 @@ Main:
 
 		if (G_help) {
 			Console.Write(op.Usage() "`n")
+			exitapp _main.Return()
+		}
+
+		if (G_version) {
+			Console.Write("Version`n")
 			exitapp _main.Return()
 		}
 
@@ -122,22 +128,43 @@ generate_dump(infile, outfile) {
 		_log.Input("outfile", outfile)
 	}
 
-	buf_size := VarSetCapacity(buffer, 8192)
+	buf_size := VarSetCapacity(buffer, 0xFFFF)
 	if (_log.Logs(Logger.Finest))
 		_log.Finest("buf_size", buf_size)
-	offset := 0
 	cur_code_sum := 0 ; Sum of all bytes in current line
 	nul_line_count := 0 ; Number of consecutive nul lines
 	cur_octets_count := 0 ; Number of octets in current line
+	total_octets_count := 0 ; Number of printed octets
+
 	try {
 		_in := open_infile(infile)
 		_out := open_outfile(outfile)
+		if (G_seek) {
+			RegExMatch(G_seek, "(?P<plus>\+)?(?P<minus>-)?(?P<number>\d+)", __seek_)
+			if (_log.Logs(Logger.Finest)) {
+				_log.Finest("__seek_plus", __seek_plus)
+				_log.Finest("__seek_minus", __seek_minus)
+				_log.Finest("__seek_number", __seek_number)
+			}
+			if (__seek_plus && !__seek_minus)
+				_in.Seek(__seek_number, 1)
+			else if (!_seek_plus && __seek_minus)
+				_in.Seek(__seek_minus __seek_number, 2)
+			else
+				_in.Seek(__seek_number)
+			if (_log.Logs(Logger.Finest)) {
+				_log.Finest("_in.Position", _in.Position)
+			}
+		} else
+			G_seek := 0
+
 		while (!_in.AtEOF) {
-			bytes_read := _in.RawRead(buffer, buf_size)
+			offset := _in.Position
 			out_line := (G_plain ? "" : offset.AsHex(String.ASHEX_NOPREFIX).Pad(String.PAD_LEFT, 7, "0") ": ")
+			bytes_read := _in.RawRead(buffer, buf_size)
 			out_line_right := ""
 			loop %bytes_read% {
-				if (G_length && offset+cur_octets_count >= G_length) { ; Force "End of file" reached if a max length is given
+				if (G_length && total_octets_count >= G_length) { ; Force "End of file" reached if a max length is given
 					bytes_read := A_Index
 					_in.Seek(0, 2) ; Goto end-of-file
 					break
@@ -147,6 +174,7 @@ generate_dump(infile, outfile) {
 					cur_code_sum+=byte
 				out_line .= octet(byte)
 				cur_octets_count++
+				total_octets_count++
 				if (!G_plain) { ; Fill right hand size with readable chars
 					if (byte > 32 && byte < 127)
 						out_line_right .= Chr(byte)
@@ -202,7 +230,10 @@ open_infile(infile) {
 		_log.Input("infile", infile)
 
 	try
-		i := FileOpen(infile, "r")
+		if (infile = "" || infile = "-")
+			i := FileOpen(Console.hStdIn, "h")
+		else
+			i := FileOpen(infile, "r")
 	catch _ex 
 		throw Exception("xxd: Failed to open file: " infile,, 3)
 
