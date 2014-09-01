@@ -176,7 +176,7 @@ generate_dump(infile, outfile) {
 				cur_octets_count++
 				total_octets_count++
 				if (!G_plain) { ; Fill right hand size with readable chars
-					if (byte > 32 && byte < 127)
+					if (byte >= 32 && byte < 127)
 						out_line_right .= Chr(byte)
 					else
 						out_line_right .= "."
@@ -206,7 +206,6 @@ generate_dump(infile, outfile) {
 			cur_octets_count++
 			while (cur_octets_count <= G_cols) {
 				out_line .= (G_bits ? "        " : "  ")
-				out_line_right .= " "
 				if (!G_plain && G_groupsize <> 0 && cur_octets_count < G_cols && !Mod(cur_octets_count, G_groupsize))
 					out_line .= " "
 				cur_octets_count++
