@@ -15,7 +15,7 @@ Main:
 	global G_autoskip := false
 		 , G_bits := false
 		 , G_cols := ""
-		 , G_groupsize := 2
+		 , G_groupsize := ""
 		 , G_length := 0
 		 , G_plain := false
 		 , G_revert := false
@@ -31,7 +31,7 @@ Main:
 	op.Add(new OptParser.Boolean("a", "autoskip", G_autoskip, "toogle autoskip: A single '*' replaces nul-lines. Default off"))
 	op.Add(new Optparser.Boolean("b", "bits", G_bits, "binary digit dump (incompatible with -p,-i,-r). Default hex"))
 	op.Add(new OptParser.String("c", "cols", G_cols, "cols", "format <cols> octets per line. Default 16 (-p: 30)",, G_cols))
-	op.Add(new OptParser.String("g", "groupsize", G_groupsize, "bytes", "number of octets per group in normal output. Default 2",, G_groupsize, 2))
+	op.Add(new OptParser.String("g", "groupsize", G_groupsize, "bytes", "number of octets per group in normal output. Default 2",, G_groupsize))
 	op.Add(new OptParser.String("l", "len", G_length, "len", "stop after <len> octets"))
 	op.Add(new OptParser.Boolean("p", "plain", G_plain, "output in postscript plain hexdump style"))
 	op.Add(new OptParser.Boolean("r", "revert", G_revert, "reverse operation: convert (or patch) hexdump into binary"))
@@ -98,14 +98,28 @@ Main:
 			G_cols := 30
 			if (_main.Logs(Logger.Info))
 				_main.Info("-p: Setting 'cols' to 30")
-		} else if (G_bits && G_cols = "") {
-			G_cols := 6
-			if (_log.Logs(Logger.Info))
-				_log.Info("-b: Setting 'cols' to 6")
-		} else if (G_cols = "") {
-			G_cols := 16
+		} else if (G_bits) {
+			if (G_cols = "")
+				G_cols := 6
 			if (_main.Logs(Logger.Info))
-				_main.Info("Setting 'cols' to default " G_cols)
+				_main.Info("-b: Setting 'cols' to 6")
+			if (G_groupsize = "")
+				G_groupsize := 1
+			if (_main.Logs(Logger.Info)) {
+				_main.Info("-b: Setting 'groupsize' to 1")
+			}
+		} else {
+			if (G_cols = "") {
+				G_cols := 16
+				if (_main.Logs(Logger.Info))
+					_main.Info("Setting 'cols' to default " G_cols)
+			}
+			if (G_groupsize = "") {
+				G_groupsize := 2
+				if (_main.Logs(Logger.Info)) {
+					_main.Info("Setting 'groupsize' to default " G_groupsize)
+				}
+			}
 		}
 
 		generate_dump(infile, outfile)
@@ -180,9 +194,9 @@ generate_dump(infile, outfile) {
 						out_line_right .= Chr(byte)
 					else
 						out_line_right .= "."
-				}
-				if (!G_plain && G_groupsize <> 0 && cur_octets_count < G_cols && !Mod(cur_octets_count, G_groupsize)) { ; Grouping 
-					out_line .= " "
+					if (!Mod(cur_octets_count, G_groupsize) && cur_octets_count < G_cols && G_groupsize <> 0) { ; Grouping 
+						out_line .= " "
+					}
 				}
 				if (!Mod(cur_octets_count, G_cols)) { ; Max no of cols reached
 					if (G_autoskip)
