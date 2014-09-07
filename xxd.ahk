@@ -7,6 +7,7 @@ SetBatchLines -1
 #Include <console>
 #Include <string>
 #Include <arrays>
+#Include *i %A_ScriptDir%\.versioninfo
 
 Main:
 	_main := new Logger("app.xxd.Main")
@@ -76,7 +77,7 @@ Main:
 		}
 
 		if (G_version) {
-			Console.Write("Version`n")
+			Console.Write(G_VERSION_INFO.NAME "/" G_VERSION_INFO.ARCH "-b" G_VERSION_INFO.BUILD "`n")
 			exitapp _main.Return()
 		}
 
@@ -122,7 +123,10 @@ Main:
 			}
 		}
 
-		generate_dump(infile, outfile)
+		if (G_revert)
+			generate_binary(infile, outfile)
+		else
+			generate_dump(infile, outfile)
 
 	} catch _ex {
 		if (_ex.Message <> "")
@@ -173,8 +177,8 @@ generate_dump(infile, outfile) {
 			G_seek := 0
 
 		while (!_in.AtEOF) {
-			offset := _in.Position
-			out_line := (G_plain ? "" : offset.AsHex(String.ASHEX_NOPREFIX).Pad(String.PAD_LEFT, 7, "0") ": ")
+			_offset := _in.Position
+			out_line := offset(_offset)
 			bytes_read := _in.RawRead(buffer, buf_size)
 			out_line_right := ""
 			loop %bytes_read% {
@@ -184,8 +188,7 @@ generate_dump(infile, outfile) {
 					break
 				}
 				byte := NumGet(buffer, A_Index-1, "UChar")
-				if (G_autoskip)
-					cur_code_sum+=byte
+				cur_code_sum += byte
 				out_line .= octet(byte)
 				cur_octets_count++
 				total_octets_count++
@@ -201,15 +204,15 @@ generate_dump(infile, outfile) {
 				if (!Mod(cur_octets_count, G_cols)) { ; Max no of cols reached
 					if (G_autoskip)
 						if (cur_code_sum = 0)
-							nul_line_count++
+							nul_line_count := nul_line_count + 1
 						else
 							nul_line_count := 0
 					if (nul_line_count <= 1) ; Print a "normal" line or the first "nul" line
 						_out.WriteLine(out_line "  " out_line_right)
-					else if (nul_line_count = 2) ; Print a single "*" for a second consecutive "nul" line; print nothing for more consecutive "nul" lines
+					else if (nul_line_count = 2) ; Print a single "*" for a second or more consecutive "nul" lines; print nothing for more consecutive "nul" lines
 						_out.WriteLine("*")
-					offset += G_cols
-					out_line := (G_plain ? "" : offset.AsHex(String.ASHEX_NOPREFIX).Pad(String.PAD_LEFT, 7, "0") ": ")
+					_offset := _offset + G_cols
+					out_line := offset(_offset)
 					out_line_right := ""
 					cur_code_sum := 0
 					cur_octets_count := 0
@@ -236,6 +239,70 @@ generate_dump(infile, outfile) {
 	return _log.Exit()
 }
 
+/*
+ * Function: generate_binary
+ *     Convert hex dump into binary.
+ */
+generate_binary(infile, outfile) {
+	_log := new Logger("app.xxd." A_ThisFunc)
+	
+	if (_log.Logs(Logger.Input)) {
+		_log.Input("infile", infile)
+		_log.Input("outfile", outfile)
+	}
+
+	line_expr := "iO)^"
+	if (!G_plain)
+		line_expr .= "([0-9a-z]+): "
+	loop % (G_cols // G_groupsize) {
+		loop % G_groupsize
+			line_expr .= "([0-9a-z]{2}|\s*)"
+	}
+	line_expr .= "\s*.*?$\s*"
+
+	try {
+		_in := open_infile(infile)
+		_out := open_outfile(outfile, "rw")
+
+		; TODO: Hande G_seek
+
+		offset := _in.Position
+		while (!_in.AtEOF()) {
+			line := _in.ReadLine()
+			if (RegExMatch(line, line_expr, $)) {
+				file_offset := "0x" $[1]
+				if (file_offset > offset) {
+					if (file_offset <= _out.Length) {
+						OutputDebug Seeking for #%file_offset%
+						_out.Seek(file_offset)
+						offset := file_offset
+					} else while (offset < file_offset) {
+						OutputDebug Skip at #%offset%
+						_out.WriteUChar(0x00)
+						offset++
+					}
+				}
+				loop %G_cols% {
+					if (Trim($[A_Index+1], "`n`r") = "")
+						break
+					_out.WriteUChar(b := "0x" $[A_Index+1])
+					OutputDebug % "Writing <" $[A_Index+1] ">"
+					offset++
+				}
+			} else
+				OutputDebug Invalid line: #%A_Index%: %line%
+		}
+	} finally {
+		if (_in)
+			_in.Close()
+		if (_out) {
+			_out.Close()
+		}
+	}
+
+	return _log.Exit()	
+}
+
 open_infile(infile) {
 	_log := new Logger("app.xxd." A_ThisFunc)
 
@@ -244,7 +311,7 @@ open_infile(infile) {
 
 	try
 		if (infile = "" || infile = "-")
-			i := FileOpen(Console.hStdIn, "h")
+			i := FileOpen(Console.hStdIn, "h `n")
 		else
 			i := FileOpen(infile, "r")
 	catch _ex 
@@ -253,17 +320,19 @@ open_infile(infile) {
 	return _log.Exit(i)
 }
 
-open_outfile(outfile) {
+open_outfile(outfile, mode = "w") {
 	_log := new Logger("app.xxd." A_ThisFunc)
 
-	if (_log.Logs(Logger.Input))
+	if (_log.Logs(Logger.Input)) {
 		_log.Input("outfile", outfile)
+		_log.Input("mode", mode)
+	}
 
 	try
 		if (outfile = "" || outfile = "-")
 			o := FileOpen(Console.hStdOut, "h")
 		else
-			o := FileOpen(outfile, "w")
+			o := FileOpen(outfile, mode)
 	catch _ex
 		throw Exception("xxd: Failed to open file: " outfile,, 4)
 
@@ -275,8 +344,6 @@ open_outfile(outfile) {
  *     Return displayable octet
  */
 octet(value) {
-	_log := new Logger("app.xxd." A_ThisFunc)
-
 	static DIGIT_TAB := {  0: ["0", "0", "0000"]
 						,  1: ["1", "1", "0001"]
 						,  2: ["2", "2", "0010"]
@@ -294,14 +361,45 @@ octet(value) {
 						, 14: ["e", "E", "1110"]
 						, 15: ["f", "F", "1111"]}
 	
-	if (_log.Logs(Logger.Input)) {
-		_log.Input("value", value)
-	}
-
 	d1 := value // 16
 	d2 := Mod(value, 16)
 
 	i := (G_bits ? 3 : (G_uppercase ? 2 : 1))
 
-	return _log.Exit(DIGIT_TAB[d1, i] . DIGIT_TAB[d2, i])
+	return DIGIT_TAB[d1, i] . DIGIT_TAB[d2, i]
+}
+
+offset(value) {
+	static DIGIT_TAB := {  0: ["0", "0"]
+						,  1: ["1", "1"]
+						,  2: ["2", "2"]
+						,  3: ["3", "3"]
+						,  4: ["4", "4"]
+						,  5: ["5", "5"]
+						,  6: ["6", "6"]
+						,  7: ["7", "7"]
+						,  8: ["8", "8"]
+						,  9: ["9", "9"]
+						, 10: ["a", "A"]
+						, 11: ["b", "B"]
+						, 12: ["c", "C"]
+						, 13: ["d", "D"]
+						, 14: ["e", "E"]
+						, 15: ["f", "F"]}
+
+	if (G_plain)
+		return _log.Exit("")
+
+	i := (G_uppercase ? 2 : 1)
+	n := StrLen(value+0) - 1
+	hex := ""
+
+	while (n > 0) {
+		f := 16**(n--)
+		d := value // f
+		value -= d * f
+		hex .= DIGIT_TAB[d, i]
+	}
+
+	return SubStr("0000000" hex . DIGIT_TAB[Mod(value, 16), i], -7) ": "
 }
