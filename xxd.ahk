@@ -176,50 +176,42 @@ generate_dump(infile, outfile) {
 		} else
 			G_seek := 0
 
-		while (!_in.AtEOF) {
-			_offset := _in.Position
-			out_line := offset(_offset)
-			bytes_read := _in.RawRead(buffer, buf_size)
-			out_line_right := ""
-			loop %bytes_read% {
-				if (G_length && total_octets_count >= G_length) { ; Force "End of file" reached if a max length is given
-					bytes_read := A_Index
-					_in.Seek(0, 2) ; Goto end-of-file
-					break
-				}
-				byte := NumGet(buffer, A_Index-1, "UChar")
-				cur_code_sum += byte
-				out_line .= octet(byte)
-				cur_octets_count++
-				total_octets_count++
-				if (!G_plain) { ; Fill right hand size with readable chars
-					if (byte >= 32 && byte < 127)
-						out_line_right .= Chr(byte)
-					else
-						out_line_right .= "."
-					if (!Mod(cur_octets_count, G_groupsize) && cur_octets_count < G_cols && G_groupsize <> 0) { ; Grouping 
-						out_line .= " "
-					}
-				}
-				if (!Mod(cur_octets_count, G_cols)) { ; Max no of cols reached
-					if (G_autoskip)
-						if (cur_code_sum = 0)
-							nul_line_count := nul_line_count + 1
-						else
-							nul_line_count := 0
-					if (nul_line_count <= 1) ; Print a "normal" line or the first "nul" line
-						_out.WriteLine(out_line "  " out_line_right)
-					else if (nul_line_count = 2) ; Print a single "*" for a second or more consecutive "nul" lines; print nothing for more consecutive "nul" lines
-						_out.WriteLine("*")
-					_offset := _offset + G_cols
-					out_line := offset(_offset)
-					out_line_right := ""
-					cur_code_sum := 0
-					cur_octets_count := 0
+		_offset := _in.Position
+		out_line := offset(_offset)
+		out_line_right := ""
+
+		while (!_in.AtEOF && (G_length = "" || _in.Position <= G_length)) {
+			byte := _in.ReadUChar()
+			cur_code_sum += byte
+			out_line .= octet(byte)
+			cur_octets_count++
+			total_octets_count++
+			if (!G_plain) { ; Fill right hand size with readable chars
+				if (byte >= 32 && byte < 127)
+					out_line_right .= Chr(byte)
+				else
+					out_line_right .= "."
+				if (!Mod(cur_octets_count, G_groupsize) && cur_octets_count < G_cols && G_groupsize <> 0) { ; Grouping 
+					out_line .= " "
 				}
 			}
+			if (!Mod(cur_octets_count, G_cols)) { ; Max no of cols reached
+				if (G_autoskip)
+					if (cur_code_sum = 0)
+						nul_line_count := nul_line_count + 1
+					else
+						nul_line_count := 0
+				if (nul_line_count <= 1) ; Print a "normal" line or the first "nul" line
+					_out.WriteLine(out_line "  " out_line_right)
+				else if (nul_line_count = 2) ; Print a single "*" for a second or more consecutive "nul" lines; print nothing for more consecutive "nul" lines
+					_out.WriteLine("*")
+				_offset := _offset + G_cols
+				out_line := offset(_offset)
+				out_line_right := ""
+				cur_code_sum := 0
+				cur_octets_count := 0
+			}
 		}
-		OutputDebug ">" %out_line% "<"
 		if (cur_octets_count > 0) { ; Fill last line if neccessary
 			cur_octets_count++
 			while (cur_octets_count <= G_cols) {
