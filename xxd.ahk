@@ -180,7 +180,9 @@ generate_dump(infile, outfile) {
 		out_line := offset(_offset)
 		out_line_right := ""
 
-		while (!_in.AtEOF && (G_length = "" || _in.Position <= G_length)) {
+		while (!_in.AtEOF) {
+			if (G_length && total_octets_count >= G_length)
+				break
 			byte := _in.ReadUChar()
 			cur_code_sum += byte
 			out_line .= octet(byte)
@@ -198,7 +200,7 @@ generate_dump(infile, outfile) {
 			if (!Mod(cur_octets_count, G_cols)) { ; Max no of cols reached
 				if (G_autoskip)
 					if (cur_code_sum = 0)
-						nul_line_count := nul_line_count + 1
+						nul_line_count++
 					else
 						nul_line_count := 0
 				if (nul_line_count <= 1) ; Print a "normal" line or the first "nul" line
@@ -265,7 +267,6 @@ generate_binary(infile, outfile) {
 				file_offset := "0x" $[1]
 				if (file_offset > offset) {
 					if (file_offset <= _out.Length) {
-						OutputDebug Seeking for #%file_offset%
 						_out.Seek(file_offset)
 						offset := file_offset
 					} else while (offset < file_offset) {
@@ -279,7 +280,6 @@ generate_binary(infile, outfile) {
 						break
 					if (offset >= G_seek) {
 						_out.WriteUChar(b := "0x" $[A_Index+1])
-						OutputDebug % _out.Position ": <" b ">"
 					}
 					offset++
 				}
@@ -395,5 +395,5 @@ offset(value) {
 		hex .= DIGIT_TAB[d, i]
 	}
 
-	return SubStr("0000000" hex . DIGIT_TAB[Mod(value, 16), i], -7) ": "
+	return SubStr("0000000" hex . DIGIT_TAB[Mod(value, 16), i], -6) ": "
 }
