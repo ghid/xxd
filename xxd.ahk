@@ -219,6 +219,7 @@ generate_dump(infile, outfile) {
 				}
 			}
 		}
+		OutputDebug ">" %out_line% "<"
 		if (cur_octets_count > 0) { ; Fill last line if neccessary
 			cur_octets_count++
 			while (cur_octets_count <= G_cols) {
@@ -257,14 +258,13 @@ generate_binary(infile, outfile) {
 	loop % (G_cols // G_groupsize) {
 		loop % G_groupsize
 			line_expr .= "([0-9a-z]{2}|\s*)"
+		line_expr .= " ?"
 	}
 	line_expr .= "\s*.*?$\s*"
 
 	try {
 		_in := open_infile(infile)
 		_out := open_outfile(outfile, "rw")
-
-		; TODO: Hande G_seek
 
 		offset := _in.Position
 		while (!_in.AtEOF()) {
@@ -277,16 +277,18 @@ generate_binary(infile, outfile) {
 						_out.Seek(file_offset)
 						offset := file_offset
 					} else while (offset < file_offset) {
-						OutputDebug Skip at #%offset%
-						_out.WriteUChar(0x00)
+						if (offset >= G_seek)
+							_out.WriteUChar(0x00)
 						offset++
 					}
 				}
 				loop %G_cols% {
 					if (Trim($[A_Index+1], "`n`r") = "")
 						break
-					_out.WriteUChar(b := "0x" $[A_Index+1])
-					OutputDebug % "Writing <" $[A_Index+1] ">"
+					if (offset >= G_seek) {
+						_out.WriteUChar(b := "0x" $[A_Index+1])
+						OutputDebug % _out.Position ": <" b ">"
+					}
 					offset++
 				}
 			} else
