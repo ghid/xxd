@@ -262,6 +262,8 @@ generate_binary(infile, outfile) {
 
 		offset := _in.Position
 		while (!_in.AtEOF()) {
+			if (G_length && offset >= G_length)
+				break
 			line := _in.ReadLine()
 			if (RegExMatch(line, line_expr, $)) {
 				file_offset := "0x" $[1]
@@ -297,6 +299,35 @@ generate_binary(infile, outfile) {
 	return _log.Exit()	
 }
 
+/*
+ * Function: generate_binary_plain
+ *     Convert plain hex data into binary
+ */
+generate_binary_plain(infile, outfile) {
+	_log := new Logger("app.xxd." A_ThisFunc)
+	
+	if (_log.Logs(Logger.Input)) {
+		_log.Input("infile", infile)
+		_log.Input("outfile", outfile)
+	}
+
+	try {
+		_in := open_infile(infile)
+		_out := open_outfile(outfile, "rw")
+
+		offset := _in.Position
+		while (!_in.AtEOF()) {
+		}
+	} finally {
+		if (_in)
+			_in.Close()
+		if (_out) {
+			_out.Close()
+		}
+	}
+	
+	return _log.Exit()
+}
 open_infile(infile) {
 	_log := new Logger("app.xxd." A_ThisFunc)
 
