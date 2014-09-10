@@ -1,4 +1,5 @@
 #NoEnv
+#NoTrayIcon
 SetBatchLines -1
 
 #Include <logging>
@@ -33,6 +34,7 @@ Main:
 	op.Add(new Optparser.Boolean("b", "bits", G_bits, "binary digit dump (incompatible with -p,-i,-r). Default hex"))
 	op.Add(new OptParser.String("c", "cols", G_cols, "cols", "format <cols> octets per line. Default 16 (-p: 30)",, G_cols))
 	op.Add(new OptParser.String("g", "groupsize", G_groupsize, "bytes", "number of octets per group in normal output. Default 2",, G_groupsize))
+	op.Add(new OptParser.Boolean("i", "include", G_include, "output in AHK include file style"))
 	op.Add(new OptParser.String("l", "len", G_length, "len", "stop after <len> octets"))
 	op.Add(new OptParser.Boolean("p", "plain", G_plain, "output in postscript plain hexdump style"))
 	op.Add(new OptParser.Boolean("r", "revert", G_revert, "reverse operation: convert (or patch) hexdump into binary"))
@@ -42,6 +44,8 @@ Main:
 	op.Add(new OptParser.Boolean("v", "version", G_version, "", OptParser.OPT_HIDDEN))
 
 	try {
+		RC := 1 ; No errors encountered
+
 		files := op.Parse(System.vArgs)
 		infile := Arrays.Shift(files)
 		outfile := Arrays.Shift(files)
@@ -91,7 +95,7 @@ Main:
 				_main.Warning("-b is incompatible with -p (" G_plain ") or -r (" G_revert "); -b is ignored")
 		}
 
-		if (G_revert && (G_autoskip || G_bits || G_groupsize || G_length))
+		if (G_revert && (G_autoskip || G_include || G_bits || G_groupsize || G_length))
 			throw Exception("",, -1)
 
 		; Handle defaults
@@ -124,7 +128,10 @@ Main:
 		}
 
 		if (G_revert)
-			generate_binary(infile, outfile)
+			if (G_plain)
+				generate_binary_plain(infile, outfile)
+			else
+				generate_binary(infile, outfile)
 		else
 			generate_dump(infile, outfile)
 
@@ -136,6 +143,7 @@ Main:
 		RC := _ex.Extra
 	}
 
+	OutputDebug Done.
 exitapp _main.Exit(RC)
 
 generate_dump(infile, outfile) {
@@ -146,9 +154,6 @@ generate_dump(infile, outfile) {
 		_log.Input("outfile", outfile)
 	}
 
-	buf_size := VarSetCapacity(buffer, 0xFFFF)
-	if (_log.Logs(Logger.Finest))
-		_log.Finest("buf_size", buf_size)
 	cur_code_sum := 0 ; Sum of all bytes in current line
 	nul_line_count := 0 ; Number of consecutive nul lines
 	cur_octets_count := 0 ; Number of octets in current line
@@ -157,26 +162,8 @@ generate_dump(infile, outfile) {
 	try {
 		_in := open_infile(infile)
 		_out := open_outfile(outfile)
-		if (G_seek) {
-			RegExMatch(G_seek, "(?P<plus>\+)?(?P<minus>-)?(?P<number>\d+)", __seek_)
-			if (_log.Logs(Logger.Finest)) {
-				_log.Finest("__seek_plus", __seek_plus)
-				_log.Finest("__seek_minus", __seek_minus)
-				_log.Finest("__seek_number", __seek_number)
-			}
-			if (__seek_plus && !__seek_minus)
-				_in.Seek(__seek_number, 1)
-			else if (!_seek_plus && __seek_minus)
-				_in.Seek(__seek_minus __seek_number, 2)
-			else
-				_in.Seek(__seek_number)
-			if (_log.Logs(Logger.Finest)) {
-				_log.Finest("_in.Position", _in.Position)
-			}
-		} else
-			G_seek := 0
 
-		_offset := _in.Position
+		_offset := seek(_in)
 		out_line := offset(_offset)
 		out_line_right := ""
 
@@ -246,9 +233,7 @@ generate_binary(infile, outfile) {
 		_log.Input("outfile", outfile)
 	}
 
-	line_expr := "iO)^"
-	if (!G_plain)
-		line_expr .= "([0-9a-z]+): "
+	line_expr := "iO)^([0-9a-z]+): "
 	loop % (G_cols // G_groupsize) {
 		loop % G_groupsize
 			line_expr .= "([0-9a-z]{2}|\s*)"
@@ -311,12 +296,27 @@ generate_binary_plain(infile, outfile) {
 		_log.Input("outfile", outfile)
 	}
 
+	line_expr := "i)^([0-9a-f]{2})*"
+
 	try {
 		_in := open_infile(infile)
 		_out := open_outfile(outfile, "rw")
 
-		offset := _in.Position
+		offset := 0
 		while (!_in.AtEOF()) {
+			if (G_length && offset >= G_length)
+				break
+			line := _in.ReadLine()
+			if (RegExMatch(line, line_expr, $)) {
+				i := 1
+				while (i < StrLen($)) {
+					if (offset >= G_seek)
+						_out.WriteUChar(b := "0x" SubStr($, i, 2))
+					offset++
+					i+=2
+				}
+			} else
+				OutputDebug Invalid line: #%A_Index%: %line%	
 		}
 	} finally {
 		if (_in)
@@ -328,6 +328,7 @@ generate_binary_plain(infile, outfile) {
 	
 	return _log.Exit()
 }
+
 open_infile(infile) {
 	_log := new Logger("app.xxd." A_ThisFunc)
 
@@ -385,11 +386,11 @@ octet(value) {
 						, 13: ["d", "D", "1101"]
 						, 14: ["e", "E", "1110"]
 						, 15: ["f", "F", "1111"]}
+
+	static i := (G_bits ? 3 : (G_uppercase ? 2 : 1))
 	
 	d1 := value // 16
 	d2 := Mod(value, 16)
-
-	i := (G_bits ? 3 : (G_uppercase ? 2 : 1))
 
 	return DIGIT_TAB[d1, i] . DIGIT_TAB[d2, i]
 }
@@ -412,10 +413,11 @@ offset(value) {
 						, 14: ["e", "E"]
 						, 15: ["f", "F"]}
 
-	if (G_plain)
-		return _log.Exit("")
+	static i := (G_uppercase ? 2 : 1)
 
-	i := (G_uppercase ? 2 : 1)
+	if (G_plain)
+		return 
+
 	n := StrLen(value+0) - 1
 	hex := ""
 
@@ -427,4 +429,35 @@ offset(value) {
 	}
 
 	return SubStr("0000000" hex . DIGIT_TAB[Mod(value, 16), i], -6) ": "
+}
+
+/*
+ * Function: seek
+ *     Move file pointer to a given position.
+ */
+seek(infile) {
+
+	_log := new Logger("app.xxd." A_ThisFunc)
+	
+	if (_log.Logs(Logger.Input)) {
+		_log.Input("infile", infile)
+	}
+	
+	if (G_seek) {
+		RegExMatch(G_seek, "(?P<plus>\+)?(?P<minus>-)?(?P<number>\d+)", seek_)
+		if (_log.Logs(Logger.Finest)) {
+			_log.Finest("seek_plus", seek_plus)
+			_log.Finest("seek_minus", seek_minus)
+			_log.Finest("seek_number", seek_number)
+		}
+		if (seek_plus && !seek_minus)
+			infile.Seek(seek_number, 1)
+		else if (!seek_plus && seek_minus)
+			infile.Seek(seek_minus seek_number, 2)
+		else
+			infile.Seek(seek_number)
+	} else
+		G_seek := 0
+
+	return _log.Exit(infile.Position)
 }
