@@ -113,6 +113,12 @@ Main:
 			if (_main.Logs(Logger.Info)) {
 				_main.Info("-b: Setting 'groupsize' to 1")
 			}
+		} else if (G_include) {
+			if (G_cols = "")
+				G_cols := 12
+			if (_main.Logs(Logger.Info)) {
+				_main.Info("-i: Setting 'cols' to 12")
+			}
 		} else {
 			if (G_cols = "") {
 				G_cols := 16
@@ -132,6 +138,8 @@ Main:
 				generate_binary_plain(infile, outfile)
 			else
 				generate_binary(infile, outfile)
+		else if (G_include)
+			generate_include(infile, outfile)
 		else
 			generate_dump(infile, outfile)
 
@@ -175,7 +183,7 @@ generate_dump(infile, outfile) {
 			out_line .= octet(byte)
 			cur_octets_count++
 			total_octets_count++
-			if (!G_plain) { ; Fill right hand size with readable chars
+			if (!G_plain && !G_include) { ; Fill right hand size with readable chars
 				if (byte >= 32 && byte < 127)
 					out_line_right .= Chr(byte)
 				else
@@ -185,7 +193,7 @@ generate_dump(infile, outfile) {
 				}
 			}
 			if (!Mod(cur_octets_count, G_cols)) { ; Max no of cols reached
-				if (G_autoskip)
+				if (G_autoskip && !G_include)
 					if (cur_code_sum = 0)
 						nul_line_count++
 					else
@@ -211,6 +219,66 @@ generate_dump(infile, outfile) {
 			}
 			_out.WriteLine(out_line "  " out_line_right)
 		}
+	} finally {
+		if (_in)
+			_in.Close()
+		if (_out)
+			_out.Close()
+	}
+
+	return _log.Exit()
+}
+
+generate_include(infile, outfile) {
+	_log := new Logger("app.xxd." A_ThisFunc)
+
+	if (_log.Logs(Logger.Input)) {
+		_log.Input("infile", infile)
+		_log.Input("outfile", outfile)
+	}
+
+	nul_line_count := 0 ; Number of consecutive nul lines
+	cur_octets_count := 0 ; Number of octets in current line
+	total_octets_count := 0 ; Number of printed octets
+	continuation_limit := 0 ; Handle limit of max. expression length (251 token)
+
+	try {
+		_in := open_infile(infile)
+		_out := open_outfile(outfile)
+
+		_offset := seek(_in)
+		varname := filename2var(infile)
+		_out.WriteLine(varname " := []")
+		indent := " ".Repeat(StrLen(varname) + 7)
+		out_line := ""
+
+		while (!_in.AtEOF) {
+			if (G_length && total_octets_count >= G_length)
+				break
+			byte := _in.ReadUChar()
+			cur_octets_count++
+			total_octets_count++
+			out_line .= (continuation_limit = 0 ? varname ".Insert( 0x" offset(total_octets_count, "") "`n" indent ", " : out_line = "" ? indent ", " : ", ") "0x" octet(byte)
+			if (continuation_limit > 250) {
+				_out.WriteLine(out_line " )")
+				out_line := ""
+				continuation_limit := 0
+				cur_octets_count := 0
+			} else
+				continuation_limit++
+			if (!Mod(cur_octets_count, G_cols)) { ; Max no of cols reached
+				if (G_length && total_octets_count >= G_Length)
+					out_line .= " )"
+				_out.WriteLine(out_line)
+				out_line := ""
+				_offset := _offset + G_cols
+				cur_octets_count := 0
+			}
+		}
+		if (cur_octets_count > 0) { ; Fill last line if neccessary
+			_out.WriteLine(out_line " )")
+		}
+		_out.WriteLine(varname "_len := " total_octets_count)
 	} finally {
 		if (_in)
 			_in.Close()
@@ -341,7 +409,7 @@ open_infile(infile) {
 		else
 			i := FileOpen(infile, "r")
 	catch _ex 
-		throw Exception("xxd: Failed to open file: " infile,, 3)
+		throw _log.Exit(Exception("xxd: Failed to open file: " infile,, 3))
 
 	return _log.Exit(i)
 }
@@ -360,7 +428,7 @@ open_outfile(outfile, mode = "w") {
 		else
 			o := FileOpen(outfile, mode)
 	catch _ex
-		throw Exception("xxd: Failed to open file: " outfile,, 4)
+		throw _log.Exit(Exception("xxd: Failed to open file: " outfile,, 4))
 
 	return _log.Exit(o)
 }
@@ -395,7 +463,7 @@ octet(value) {
 	return DIGIT_TAB[d1, i] . DIGIT_TAB[d2, i]
 }
 
-offset(value) {
+offset(value, suffix = ": ") {
 	static DIGIT_TAB := {  0: ["0", "0"]
 						,  1: ["1", "1"]
 						,  2: ["2", "2"]
@@ -428,7 +496,7 @@ offset(value) {
 		hex .= DIGIT_TAB[d, i]
 	}
 
-	return SubStr("0000000" hex . DIGIT_TAB[Mod(value, 16), i], -6) ": "
+	return SubStr("0000000" hex . DIGIT_TAB[Mod(value, 16), i], -6) suffix
 }
 
 /*
@@ -460,4 +528,22 @@ seek(infile) {
 		G_seek := 0
 
 	return _log.Exit(infile.Position)
+}
+
+/*
+ * Function: filename2var
+ *     Generate a variable name on base of a filename.
+ */
+filename2var(filename) {
+	_log := new Logger("app.xxd." A_ThisFunc)
+	
+	if (_log.Logs(Logger.Input)) {
+		_log.Input("filename", filename)
+	}
+
+	SplitPath filename,,, ext, name
+	ext := RegExReplace(ext, "i)[^a-z0-9_#$@]", "_")
+	name := RegExReplace(name, "i)[^a-z0-9_#$@]", "_")
+	
+	return _log.Exit(name "_" ext)
 }
