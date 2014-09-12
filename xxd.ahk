@@ -455,7 +455,7 @@ octet(value) {
 						, 14: ["e", "E", "1110"]
 						, 15: ["f", "F", "1111"]}
 
-	static i := (G_bits ? 3 : (G_uppercase ? 2 : 1))
+	i := (G_bits ? 3 : (G_uppercase ? 2 : 1))
 	
 	d1 := value // 16
 	d2 := Mod(value, 16)
@@ -481,10 +481,10 @@ offset(value, suffix = ": ") {
 						, 14: ["e", "E"]
 						, 15: ["f", "F"]}
 
-	static i := (G_uppercase ? 2 : 1)
-
 	if (G_plain)
 		return 
+
+	i := (G_uppercase ? 2 : 1)
 
 	n := StrLen(value+0) - 1
 	hex := ""
