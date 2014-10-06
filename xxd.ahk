@@ -5,7 +5,7 @@ SetBatchLines -1
 #Include <logging>
 #Include <optparser>
 #Include <system>
-#Include <console>
+#Include <ansi>
 #Include <string>
 #Include <arrays>
 #Include *i %A_ScriptDir%\.versioninfo
@@ -76,12 +76,12 @@ Main:
 		}
 
 		if (G_help) {
-			Console.Write(op.Usage() "`n")
+			Ansi.WriteLine(op.Usage())
 			exitapp _main.Return()
 		}
 
 		if (G_version) {
-			Console.Write(G_VERSION_INFO.NAME "/" G_VERSION_INFO.ARCH "-b" G_VERSION_INFO.BUILD "`n")
+			Ansi.WriteLine(G_VERSION_INFO.NAME "/" G_VERSION_INFO.ARCH "-b" G_VERSION_INFO.BUILD)
 			exitapp _main.Return()
 		}
 
@@ -145,8 +145,8 @@ Main:
 
 	} catch _ex {
 		if (_ex.Message <> "")
-			Console.Write(_ex.Message "`n")
-		Console.Write(op.Usage() "`n")
+			Ansi.WriteLine(_ex.Message)
+		Ansi.WriteLine(op.Usage())
 
 		RC := _ex.Extra
 	}
@@ -405,7 +405,7 @@ open_infile(infile) {
 
 	try
 		if (infile = "" || infile = "-")
-			i := FileOpen(Console.hStdIn, "h `n")
+			i := Ansi.StdIn
 		else
 			i := FileOpen(infile, "r")
 	catch _ex 
@@ -424,7 +424,7 @@ open_outfile(outfile, mode = "w") {
 
 	try
 		if (outfile = "" || outfile = "-")
-			o := FileOpen(Console.hStdOut, "h")
+			o := Ansi.StdOut
 		else
 			o := FileOpen(outfile, mode)
 	catch _ex
@@ -547,3 +547,4 @@ filename2var(filename) {
 	
 	return _log.Exit(name "_" ext)
 }
+; vim: ts=4:sts=4:sw=4:tw=0:noet
