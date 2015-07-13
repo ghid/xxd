@@ -104,20 +104,21 @@ Main:
 			if (_main.Logs(Logger.Info))
 				_main.Info("-p: Setting 'cols' to 30")
 		} else if (G_bits) {
-			if (G_cols = "")
+			if (G_cols = "") {
 				G_cols := 6
-			if (_main.Logs(Logger.Info))
-				_main.Info("-b: Setting 'cols' to 6")
-			if (G_groupsize = "")
+				if (_main.Logs(Logger.Info))
+					_main.Info("-b: Setting 'cols' to 6")
+			}
+			if (G_groupsize = "") {
 				G_groupsize := 1
-			if (_main.Logs(Logger.Info)) {
-				_main.Info("-b: Setting 'groupsize' to 1")
+				if (_main.Logs(Logger.Info))
+					_main.Info("-b: Setting 'groupsize' to 1")
 			}
 		} else if (G_include) {
-			if (G_cols = "")
+			if (G_cols = "") {
 				G_cols := 12
-			if (_main.Logs(Logger.Info)) {
-				_main.Info("-i: Setting 'cols' to 12")
+				if (_main.Logs(Logger.Info))
+					_main.Info("-i: Setting 'cols' to 12")
 			}
 		} else {
 			if (G_cols = "") {
@@ -339,7 +340,8 @@ generate_binary(infile, outfile) {
 					offset++
 				}
 			} else
-				OutputDebug Invalid line: #%A_Index%: %line%
+				if (_log.Logs(Logger.Warning))
+					_log.Warning("Invalid line: #" A_Index ": " line)
 		}
 	} finally {
 		if (_in)
@@ -384,7 +386,8 @@ generate_binary_plain(infile, outfile) {
 					i+=2
 				}
 			} else
-				OutputDebug Invalid line: #%A_Index%: %line%	
+				if (_log.Logs(Logger.Warning))
+					_log.Warning("Invalid line: #" A_Index ": " line)
 		}
 	} finally {
 		if (_in)
