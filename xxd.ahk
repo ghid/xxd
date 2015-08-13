@@ -77,12 +77,12 @@ Main:
 
 		if (G_help) {
 			Ansi.WriteLine(op.Usage())
-			exitapp _main.Return()
+			exitapp _main.Exit()
 		}
 
 		if (G_version) {
 			Ansi.WriteLine(G_VERSION_INFO.NAME "/" G_VERSION_INFO.ARCH "-b" G_VERSION_INFO.BUILD)
-			exitapp _main.Return()
+			exitapp _main.Exit()
 		}
 
 		; Plausibility checks
