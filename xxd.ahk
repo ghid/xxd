@@ -259,7 +259,7 @@ generate_include(infile, outfile) {
 			byte := _in.ReadUChar()
 			cur_octets_count++
 			total_octets_count++
-			out_line .= (continuation_limit = 0 ? varname ".Insert( 0x" offset(total_octets_count, "") "`n" indent ", " : out_line = "" ? indent ", " : ", ") "0x" octet(byte)
+			out_line .= (continuation_limit = 0 ? "`n" varname ".Insert( 0x" offset(total_octets_count, "") "`n" indent ", " : out_line = "" ? "`n" indent ", " : ", ") "0x" octet(byte)
 			if (continuation_limit > 250) {
 				_out.WriteLine(out_line " )")
 				out_line := ""
@@ -270,13 +270,13 @@ generate_include(infile, outfile) {
 			if (!Mod(cur_octets_count, G_cols)) { ; Max no of cols reached
 				if (G_length && total_octets_count >= G_Length)
 					out_line .= " )"
-				_out.WriteLine(out_line)
+				_out.Write(out_line)
 				out_line := ""
 				_offset := _offset + G_cols
 				cur_octets_count := 0
 			}
 		}
-		if (cur_octets_count > 0) { ; Fill last line if neccessary
+		if (cur_octets_count > 0 || out_line = "") { ; Fill last line if neccessary
 			_out.WriteLine(out_line " )")
 		}
 		_out.WriteLine(varname "_len := " total_octets_count)
