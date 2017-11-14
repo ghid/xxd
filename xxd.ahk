@@ -407,9 +407,12 @@ open_infile(infile) {
 		_log.Input("infile", infile)
 
 	try
-		if (infile = "" || infile = "-")
+		if (infile = "" || infile = "-") {
+			if (_log.Logs(Logger.Finest)) {
+				_log.Finest("Ansi.StdIn", Ansi.StdIn)
+			}
 			i := Ansi.StdIn
-		else
+		} else
 			i := FileOpen(infile, "r")
 	catch _ex 
 		throw _log.Exit(Exception("xxd: Failed to open file: " infile,, 3))
