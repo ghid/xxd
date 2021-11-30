@@ -1,3 +1,5 @@
+; ahk: console
+#SingleInstance off
 #NoEnv
 #NoTrayIcon
 SetBatchLines -1
@@ -14,34 +16,34 @@ Main:
 	_main := new Logger("app.xxd.Main")
 
 	; Define Command Parser Options as Super global vars to make them everywhere accessable
-	global G_autoskip := false
-		 , G_bits := false
-		 , G_cols := ""
-		 , G_groupsize := ""
-		 , G_length := 0
-		 , G_plain := false
-		 , G_revert := false
-		 , G_seek := 0
-		 , G_start_at := 0
-		 , G_uppercase := false
-		 , G_help := false
-		 , G_version := false
+	global opts := { autoskip: false
+				   , bits: false
+				   , cols: ""
+				   , groupsize: ""
+				   , length: 0
+				   , plain: false
+				   , revert: false
+				   , seek: 0
+				   , start_at: 0
+				   , uppercase: false
+				   , help: false
+				   , version: false }
 
 	op := new OptParser(["xxd [options] [--] [<infile> [<outfile>]]"
 					   , "xxd -r [-s <[-]offset>] [-c <cols>] [-p] [--] [<infile> [<outfile>]]"]
 					   , OptParser.PARSER_ALLOW_DASHED_ARGS)
-	op.Add(new OptParser.Boolean("a", "autoskip", G_autoskip, "toogle autoskip: A single '*' replaces nul-lines. Default off"))
-	op.Add(new Optparser.Boolean("b", "bits", G_bits, "binary digit dump (incompatible with -p,-i,-r). Default hex"))
-	op.Add(new OptParser.String("c", "cols", G_cols, "cols", "format <cols> octets per line. Default 16 (-p: 30)",, G_cols))
-	op.Add(new OptParser.String("g", "groupsize", G_groupsize, "bytes", "number of octets per group in normal output. Default 2",, G_groupsize))
-	op.Add(new OptParser.Boolean("i", "include", G_include, "output in AHK include file style"))
-	op.Add(new OptParser.String("l", "len", G_length, "len", "stop after <len> octets"))
-	op.Add(new OptParser.Boolean("p", "plain", G_plain, "output in postscript plain hexdump style"))
-	op.Add(new OptParser.Boolean("r", "revert", G_revert, "reverse operation: convert (or patch) hexdump into binary"))
-	op.Add(new OptParser.String("s", "seek", G_seek, "[+][-]seek", "start at <seek> bytes abs. (or +: rel.) infile offset"))
-	op.Add(new OptParser.Boolean("u", "", G_uppercase, "use uppercase hex letters"))
-	op.Add(new OptParser.Boolean("h", "help", G_help, "", OptParser.OPT_HIDDEN))
-	op.Add(new OptParser.Boolean("v", "version", G_version, "", OptParser.OPT_HIDDEN))
+	op.Add(new OptParser.Boolean("a", "autoskip", opts, "autoskip", "toogle autoskip: A single '*' replaces nul-lines. Default off"))
+	op.Add(new Optparser.Boolean("b", "bits", opts, "bits", "binary digit dump (incompatible with -p,-i,-r). Default hex"))
+	op.Add(new OptParser.String("c", "cols", opts, "cols", "cols", "format <cols> octets per line. Default 16 (-p: 30)",, opts.cols))
+	op.Add(new OptParser.String("g", "groupsize", opts, "groupsize", "bytes", "number of octets per group in normal output. Default 2",, opts.groupsize))
+	op.Add(new OptParser.Boolean("i", "include", opts, "include", "output in AHK include file style"))
+	op.Add(new OptParser.String("l", "len", opts, "length", "len", "stop after <len> octets"))
+	op.Add(new OptParser.Boolean("p", "plain", opts, "plain", "output in postscript plain hexdump style"))
+	op.Add(new OptParser.Boolean("r", "revert", opts, "revert", "reverse operation: convert (or patch) hexdump into binary"))
+	op.Add(new OptParser.String("s", "seek", opts, "seek", "[+][-]seek", "start at <seek> bytes abs. (or +: rel.) infile offset"))
+	op.Add(new OptParser.Boolean("u", "", opts, "uppercase", "use uppercase hex letters"))
+	op.Add(new OptParser.Boolean("h", "help", opts, "help", "", OptParser.OPT_HIDDEN))
+	op.Add(new OptParser.Boolean("v", "version", opts, "version", "", OptParser.OPT_HIDDEN))
 
 	try {
 		RC := 1 ; No errors encountered
@@ -52,35 +54,18 @@ Main:
 		if (files.MaxIndex() <> "")
 			throw Exception("",, 2)
 
-		; Resize all String params
-		op.TrimArg(G_cols)
-		op.TrimArg(G_groupsize)
-		op.TrimArg(G_length)
-		op.TrimArg(G_seek)
-
 		if (_main.Logs(Logger.Finest)) {
-			_main.Finest("G_autoskip", G_autoskip)
-			_main.Finest("G_bits", G_bits)
-			_main.Finest("G_cols", G_cols)
-			_main.Finest("G_groupsize", G_groupsize)
-			_main.Finest("G_length", G_length)
-			_main.Finest("G_plain", G_plain)
-			_main.Finest("G_revert", G_revert)
-			_main.Finest("G_seek", G_seek)
-			_main.Finest("G_start_at", G_start_at)
-			_main.Finest("G_uppercase", G_uppercase)
-			_main.Finest("G_help", G_help)
-			_main.Finest("G_version", G_version)
+			_main.Finest("opts:`n" LoggingHelper.Dump(opts))
 			_main.Finest("infile", infile)
 			_main.Finest("outfile", outfile)
 		}
 
-		if (G_help) {
+		if (opts.help) {
 			Ansi.WriteLine(op.Usage())
 			exitapp _main.Exit()
 		}
 
-		if (G_version) {
+		if (opts.version) {
 			Ansi.WriteLine(G_VERSION_INFO.NAME "/" G_VERSION_INFO.ARCH "-b" G_VERSION_INFO.BUILD)
 			exitapp _main.Exit()
 		}
@@ -89,57 +74,60 @@ Main:
 		if (files.MaxIndex() > 2)
 			throw Exception("",, 1)
 
-		if (G_bits && (G_plain || G_revert)) {
-			G_bits := false
+		if (opts.bits && (opts.plain || opts.revert)) {
+			opts.bits := false
 			if (_main.Logs(Logger.Warning))
-				_main.Warning("-b is incompatible with -p (" G_plain ") or -r (" G_revert "); -b is ignored")
+				_main.Warning("-b is incompatible with -p (" opts.plain ") or -r (" opts.revert "); -b is ignored")
 		}
 
-		if (G_revert && (G_autoskip || G_include || G_bits || G_groupsize || G_length))
+		if (opts.revert && (opts.autoskip || opts.include || opts.bits || opts.groupsize || opts.length))
 			throw Exception("",, -1)
 
 		; Handle defaults
-		if (G_plain && G_cols = "") {
-			G_cols := 30
+		if (opts.plain && opts.cols = "") {
+			opts.cols := 30
 			if (_main.Logs(Logger.Info))
 				_main.Info("-p: Setting 'cols' to 30")
-		} else if (G_bits) {
-			if (G_cols = "") {
-				G_cols := 6
+		} else if (opts.bits) {
+			if (opts.cols = "") {
+				opts.cols := 6
 				if (_main.Logs(Logger.Info))
 					_main.Info("-b: Setting 'cols' to 6")
 			}
-			if (G_groupsize = "") {
-				G_groupsize := 1
+			if (opts.groupsize = "") {
+				opts.groupsize := 1
 				if (_main.Logs(Logger.Info))
 					_main.Info("-b: Setting 'groupsize' to 1")
 			}
-		} else if (G_include) {
-			if (G_cols = "") {
-				G_cols := 12
+		} else if (opts.include) {
+			if (opts.cols = "") {
+				opts.cols := 12
 				if (_main.Logs(Logger.Info))
 					_main.Info("-i: Setting 'cols' to 12")
 			}
 		} else {
-			if (G_cols = "") {
-				G_cols := 16
+			if (opts.cols = "") {
+				opts.cols := 16
 				if (_main.Logs(Logger.Info))
-					_main.Info("Setting 'cols' to default " G_cols)
+					_main.Info("Setting 'cols' to default " opts.cols)
 			}
-			if (G_groupsize = "") {
-				G_groupsize := 2
+			if (opts.groupsize = "") {
+				opts.groupsize := 2
 				if (_main.Logs(Logger.Info)) {
-					_main.Info("Setting 'groupsize' to default " G_groupsize)
+					_main.Info("Setting 'groupsize' to default " opts.groupsize)
 				}
 			}
 		}
+		if (_main.Logs(Logger.Finest)) {
+			_main.Finest("opts:`n" LoggingHelper.Dump(opts))
+		}
 
-		if (G_revert)
-			if (G_plain)
+		if (opts.revert)
+			if (opts.plain)
 				generate_binary_plain(infile, outfile)
 			else
 				generate_binary(infile, outfile)
-		else if (G_include)
+		else if (opts.include)
 			generate_include(infile, outfile)
 		else
 			generate_dump(infile, outfile)
@@ -177,24 +165,24 @@ generate_dump(infile, outfile) {
 		out_line_right := ""
 
 		while (!_in.AtEOF) {
-			if (G_length && total_octets_count >= G_length)
+			if (opts.length && total_octets_count >= opts.length)
 				break
 			byte := _in.ReadUChar()
 			cur_code_sum += byte
 			out_line .= octet(byte)
 			cur_octets_count++
 			total_octets_count++
-			if (!G_plain && !G_include) { ; Fill right hand size with readable chars
+			if (!opts.plain && !opts.include) { ; Fill right hand size with readable chars
 				if (byte >= 32 && byte < 127)
 					out_line_right .= Chr(byte)
 				else
 					out_line_right .= "."
-				if (!Mod(cur_octets_count, G_groupsize) && cur_octets_count < G_cols && G_groupsize <> 0) { ; Grouping 
+				if (!Mod(cur_octets_count, opts.groupsize) && cur_octets_count < opts.cols && opts.groupsize <> 0) { ; Grouping 
 					out_line .= " "
 				}
 			}
-			if (!Mod(cur_octets_count, G_cols)) { ; Max no of cols reached
-				if (G_autoskip && !G_include)
+			if (!Mod(cur_octets_count, opts.cols)) { ; Max no of cols reached
+				if (opts.autoskip && !opts.include)
 					if (cur_code_sum = 0)
 						nul_line_count++
 					else
@@ -203,7 +191,7 @@ generate_dump(infile, outfile) {
 					_out.WriteLine(out_line "  " out_line_right)
 				else if (nul_line_count = 2) ; Print a single "*" for a second or more consecutive "nul" lines; print nothing for more consecutive "nul" lines
 					_out.WriteLine("*")
-				_offset := _offset + G_cols
+				_offset := _offset + opts.cols
 				out_line := offset(_offset)
 				out_line_right := ""
 				cur_code_sum := 0
@@ -212,9 +200,9 @@ generate_dump(infile, outfile) {
 		}
 		if (cur_octets_count > 0) { ; Fill last line if neccessary
 			cur_octets_count++
-			while (cur_octets_count <= G_cols) {
-				out_line .= (G_bits ? "        " : "  ")
-				if (!G_plain && G_groupsize <> 0 && cur_octets_count < G_cols && !Mod(cur_octets_count, G_groupsize))
+			while (cur_octets_count <= opts.cols) {
+				out_line .= (opts.bits ? "        " : "  ")
+				if (!opts.plain && opts.groupsize <> 0 && cur_octets_count < opts.cols && !Mod(cur_octets_count, opts.groupsize))
 					out_line .= " "
 				cur_octets_count++
 			}
@@ -254,7 +242,7 @@ generate_include(infile, outfile) {
 		out_line := ""
 
 		while (!_in.AtEOF) {
-			if (G_length && total_octets_count >= G_length)
+			if (opts.length && total_octets_count >= opts.length)
 				break
 			byte := _in.ReadUChar()
 			cur_octets_count++
@@ -267,12 +255,12 @@ generate_include(infile, outfile) {
 				cur_octets_count := 0
 			} else
 				continuation_limit++
-			if (!Mod(cur_octets_count, G_cols)) { ; Max no of cols reached
-				if (G_length && total_octets_count >= G_Length)
+			if (!Mod(cur_octets_count, opts.cols)) { ; Max no of cols reached
+				if (opts.length && total_octets_count >= opts.Length)
 					out_line .= " )"
 				_out.Write(out_line)
 				out_line := ""
-				_offset := _offset + G_cols
+				_offset := _offset + opts.cols
 				cur_octets_count := 0
 			}
 		}
@@ -303,8 +291,8 @@ generate_binary(infile, outfile) {
 	}
 
 	line_expr := "iO)^([0-9a-z]+): "
-	loop % (G_cols // G_groupsize) {
-		loop % G_groupsize
+	loop % (opts.cols // opts.groupsize) {
+		loop % opts.groupsize
 			line_expr .= "([0-9a-z]{2}|\s*)"
 		line_expr .= " ?"
 	}
@@ -316,7 +304,7 @@ generate_binary(infile, outfile) {
 
 		offset := _in.Position
 		while (!_in.AtEOF()) {
-			if (G_length && offset >= G_length)
+			if (opts.length && offset >= opts.length)
 				break
 			line := _in.ReadLine()
 			if (RegExMatch(line, line_expr, $)) {
@@ -326,15 +314,15 @@ generate_binary(infile, outfile) {
 						_out.Seek(file_offset)
 						offset := file_offset
 					} else while (offset < file_offset) {
-						if (offset >= G_seek)
+						if (offset >= opts.seek)
 							_out.WriteUChar(0x00)
 						offset++
 					}
 				}
-				loop %G_cols% {
+				loop % opts.cols {
 					if (Trim($[A_Index+1], "`n`r") = "")
 						break
-					if (offset >= G_seek) {
+					if (offset >= opts.seek) {
 						_out.WriteUChar(b := "0x" $[A_Index+1])
 					}
 					offset++
@@ -374,13 +362,13 @@ generate_binary_plain(infile, outfile) {
 
 		offset := 0
 		while (!_in.AtEOF()) {
-			if (G_length && offset >= G_length)
+			if (opts.length && offset >= opts.length)
 				break
 			line := _in.ReadLine()
 			if (RegExMatch(line, line_expr, $)) {
 				i := 1
 				while (i < StrLen($)) {
-					if (offset >= G_seek)
+					if (offset >= opts.seek)
 						_out.WriteUChar(b := "0x" SubStr($, i, 2))
 					offset++
 					i+=2
@@ -461,7 +449,7 @@ octet(value) {
 						, 14: ["e", "E", "1110"]
 						, 15: ["f", "F", "1111"]}
 
-	i := (G_bits ? 3 : (G_uppercase ? 2 : 1))
+	i := (opts.bits ? 3 : (opts.uppercase ? 2 : 1))
 	
 	d1 := value // 16
 	d2 := Mod(value, 16)
@@ -487,10 +475,10 @@ offset(value, suffix = ": ") {
 						, 14: ["e", "E"]
 						, 15: ["f", "F"]}
 
-	if (G_plain)
+	if (opts.plain)
 		return 
 
-	i := (G_uppercase ? 2 : 1)
+	i := (opts.uppercase ? 2 : 1)
 
 	n := StrLen(value+0) - 1
 	hex := ""
@@ -517,8 +505,8 @@ seek(infile) {
 		_log.Input("infile", infile)
 	}
 	
-	if (G_seek) {
-		RegExMatch(G_seek, "(?P<plus>\+)?(?P<minus>-)?(?P<number>\d+)", seek_)
+	if (opts.seek) {
+		RegExMatch(opts.seek, "(?P<plus>\+)?(?P<minus>-)?(?P<number>\d+)", seek_)
 		if (_log.Logs(Logger.Finest)) {
 			_log.Finest("seek_plus", seek_plus)
 			_log.Finest("seek_minus", seek_minus)
@@ -531,7 +519,7 @@ seek(infile) {
 		else
 			infile.Seek(seek_number)
 	} else
-		G_seek := 0
+		opts.seek := 0
 
 	return _log.Exit(infile.Position)
 }
